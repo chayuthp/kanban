@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kanban Board with Glassmorphism</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
+      body {
+        margin: 0;
+        padding: 0;
+        display: block;
+        font-family: "DM Sans", serif;
+        /* background-color: #fff; */
+      }
+      .glass-effect {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .dragging {
+        opacity: 0.5;
+        transform: scale(1.02);
+        transition: all 0.2s ease;
+      }
+
+      .kanban-column {
+        min-width: 300px;
+        max-width: 300px;
+        margin: 0 10px;
+      }
+
+      .kanban-card {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        cursor: move;
+      }
+
+      .kanban-card .title {
+        color: #1e40af;
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+
+      .kanban-card .date {
+        color: #9ca3af;
+        font-size: 0.8em;
+        margin-top: 8px;
+      }
+
+      .delete-btn {
+        border: 2px solid transparent;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+      }
+
+      .delete-btn:hover {
+        border-color: #60a5fa; /* Blue aura border color */
+        box-shadow: 0 0 10px rgba(96, 165, 250, 0.5); /* Blue aura effect */
+      }
+
+      .editable:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+        cursor: text;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-black font-sans min-h-screen flex items-center justify-center p-4"
+  >
+    <div class="flex flex-col items-center w-full max-w-5xl">
+      <!-- Kanban Columns -->
+      <div class="flex overflow-x-auto">
+        <div class="kanban-column glass-effect p-4 rounded-xl">
+          <h2
+            class="text-xl font-semibold mb-4 text-white flex justify-between items-center"
+          >
+            To Do
+            <span class="bg-white/20 px-2 py-1 rounded-full text-sm">3</span>
+            <button class="text-white text-sm">+</button>
+          </h2>
+          <div id="to-do" class="space-y-4">
+            <!-- Cards will be added here -->
+          </div>
+        </div>
+
+        <div class="kanban-column glass-effect p-4 rounded-xl">
+          <h2
+            class="text-xl font-semibold mb-4 text-white flex justify-between items-center"
+          >
+            In Progress
+            <span class="bg-white/20 px-2 py-1 rounded-full text-sm">2</span>
+            <button class="text-white text-sm">+</button>
+          </h2>
+          <div id="in-progress" class="space-y-4">
+            <!-- Cards will be added here -->
+          </div>
+        </div>
+
+        <div class="kanban-column glass-effect p-4 rounded-xl">
+          <h2
+            class="text-xl font-semibold mb-4 text-white flex justify-between items-center"
+          >
+            In Review
+            <span class="bg-white/20 px-2 py-1 rounded-full text-sm">4</span>
+            <button class="text-white text-sm">+</button>
+          </h2>
+          <div id="in-review" class="space-y-4">
+            <!-- Cards will be added here -->
+          </div>
+        </div>
+
+        <div class="kanban-column glass-effect p-4 rounded-xl">
+          <h2
+            class="text-xl font-semibold mb-4 text-white flex justify-between items-center"
+          >
+            Done
+            <span class="bg-white/20 px-2 py-1 rounded-full text-sm">3</span>
+            <button class="text-white text-sm">+</button>
+          </h2>
+          <div id="done" class="space-y-4">
+            <!-- Cards will be added here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      class KanbanBoard {
+        constructor() {
+          this.columns = {
+            "to-do": [],
+            "in-progress": [],
+            "in-review": [],
+            done: [],
+          };
+          this.initEventListeners();
+          this.loadTasks();
+          this.initSortable();
+        }
+
+        initEventListeners() {
+          // Add task (simplified for demo - normally you'd have a form)
+          document
+            .querySelectorAll(".kanban-column button")
+            .forEach((button) => {
+              button.addEventListener("click", () => {
+                const column = button
+                  .closest(".kanban-column")
+                  .querySelector("div").id;
+                this.addTask(column);
+              });
+            });
+        }
+
+        initSortable() {
+          const columns = ["to-do", "in-progress", "in-review", "done"];
+          columns.forEach((column) => {
+            new Sortable(document.getElementById(column), {
+              group: "kanban", // Enable dragging between columns
+              animation: 150, // Animation duration in milliseconds
+              handle: ".kanban-card", // Specify the draggable element
+              onEnd: (evt) => {
+                const { oldIndex, newIndex, from, to } = evt;
+                if (from.id !== to.id || oldIndex !== newIndex) {
+                  const taskId = from.children[oldIndex]?.dataset.id;
+                  if (taskId) {
+                    const fromColumn = from.id;
+                    const toColumn = to.id;
+                    const task = this.columns[fromColumn].find(
+                      (t) => t && t.id === parseInt(taskId)
+                    );
+                    if (task) {
+                      this.columns[fromColumn] = this.columns[
+                        fromColumn
+                      ].filter((t) => t && t.id !== parseInt(taskId));
+                      this.columns[toColumn].splice(newIndex, 0, task);
+                      this.saveTasks();
+                      this.renderTasks();
+                    }
+                  }
+                }
+              },
+            });
+          });
+        }
+
+        addTask(column) {
+          const task = {
+            id: Date.now(),
+            title: `Task ${this.columns[column].length + 1}`,
+            description:
+              "Lorem ipsum dolor sit amet, consectetur adipiscing elit...",
+            date: new Date().toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            }),
+            assignees: ["person1", "person2"], // Placeholder for avatars
+          };
+          this.columns[column].push(task);
+          this.saveTasks();
+          this.renderTasks();
+        }
+
+        deleteTask(column, taskId) {
+          this.columns[column] = this.columns[column].filter(
+            (task) => task && task.id !== taskId
+          );
+          this.saveTasks();
+          this.renderTasks();
+        }
+
+        updateTaskTitle(column, taskId, newTitle) {
+          const task = this.columns[column].find((t) => t && t.id === taskId);
+          if (task) {
+            task.title = newTitle.trim() || "Untitled Task";
+            this.saveTasks();
+            this.renderTasks();
+          }
+        }
+
+        updateTaskDescription(column, taskId, newDescription) {
+          const task = this.columns[column].find((t) => t && t.id === taskId);
+          if (task) {
+            task.description = newDescription.trim() || "No description";
+            this.saveTasks();
+            this.renderTasks();
+          }
+        }
+
+        saveTasks() {
+          localStorage.setItem("kanbanTasks", JSON.stringify(this.columns));
+        }
+
+        loadTasks() {
+          const savedTasks = localStorage.getItem("kanbanTasks");
+          if (savedTasks) {
+            try {
+              const parsedTasks = JSON.parse(savedTasks);
+              // Validate and sanitize the loaded data
+              this.columns = {
+                "to-do": Array.isArray(parsedTasks["to-do"])
+                  ? parsedTasks["to-do"]
+                  : [],
+                "in-progress": Array.isArray(parsedTasks["in-progress"])
+                  ? parsedTasks["in-progress"]
+                  : [],
+                "in-review": Array.isArray(parsedTasks["in-review"])
+                  ? parsedTasks["in-review"]
+                  : [],
+                done: Array.isArray(parsedTasks["done"])
+                  ? parsedTasks["done"]
+                  : [],
+              };
+              // Ensure each task has required properties
+              Object.keys(this.columns).forEach((column) => {
+                this.columns[column] = this.columns[column].map((task) => ({
+                  id: task?.id || Date.now(), // Default to a new ID if missing
+                  title: task?.title || "Untitled Task",
+                  description: task?.description || "No description",
+                  date:
+                    task?.date ||
+                    new Date().toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    }),
+                  assignees: Array.isArray(task?.assignees)
+                    ? task.assignees
+                    : [],
+                }));
+              });
+            } catch (e) {
+              console.error("Error loading tasks from localStorage:", e);
+              // Reset to default if parsing fails
+              this.columns = {
+                "to-do": [],
+                "in-progress": [],
+                done: [],
+                "in-review": [],
+              };
+            }
+          } else {
+            // Initial sample data matching the image
+            this.columns["to-do"] = [
+              {
+                id: 1,
+                title: "Mobile Wireframes",
+                description: "Design mobile wireframes for the app",
+                date: "Apr 12",
+                assignees: ["person1", "person2"],
+              },
+              {
+                id: 2,
+                title: "User Research",
+                description: "Conduct user interviews and surveys",
+                date: "Mar 4",
+                assignees: ["person1"],
+              },
+              {
+                id: 3,
+                title: "Client Call",
+                description: "Discuss project updates with the client",
+                date: "Apr 2",
+                assignees: ["person1"],
+              },
+            ];
+            this.columns["in-progress"] = [
+              {
+                id: 4,
+                title: "Login Flow",
+                description: "Implement login and authentication flow",
+                date: "Apr 3",
+                assignees: ["person1", "person2"],
+              },
+              {
+                id: 5,
+                title: "Forgot Password Screen",
+                description: "Design and code forgot password feature",
+                date: "Apr 6",
+                assignees: ["person1", "person2", "person3"],
+              },
+            ];
+            this.columns["in-review"] = [
+              {
+                id: 6,
+                title: "Landing Page",
+                description: "Review landing page design and functionality",
+                date: "Mar 8",
+                assignees: ["person1", "person2"],
+              },
+              {
+                id: 7,
+                title: "Annual Presentation",
+                description: "Prepare slides and data for annual review",
+                date: "Mar 15",
+                assignees: ["person1", "person2"],
+              },
+              {
+                id: 8,
+                title: "Icons",
+                description: "Design and finalize app icons",
+                date: "Apr 10",
+                assignees: ["person1"],
+              },
+              {
+                id: 9,
+                title: "Onboarding Screens",
+                description: "Create interactive onboarding experience",
+                date: "Mar 17",
+                assignees: ["person1", "person2"],
+              },
+            ];
+            this.columns["done"] = [
+              {
+                id: 10,
+                title: "Product Mockups",
+                description: "Finalize product mockups for presentation",
+                date: "Mar 2",
+                assignees: ["person1", "person2"],
+              },
+              {
+                id: 11,
+                title: "Workshop Ideas",
+                description: "Brainstorm and document workshop concepts",
+                date: "Mar 4",
+                assignees: ["person1"],
+              },
+              {
+                id: 12,
+                title: "Navigation",
+                description: "Implement navigation menu for the app",
+                date: "Mar 15",
+                assignees: ["person1"],
+              },
+            ];
+          }
+          this.renderTasks();
+        }
+
+        renderTasks() {
+          const columns = ["to-do", "in-progress", "in-review", "done"];
+          columns.forEach((column) => {
+            const container = document.getElementById(column);
+            if (!container) return; // Safety check if the element doesn't exist
+            container.innerHTML = "";
+            const count = this.columns[column]?.length || 0;
+            const countElement = document
+              .querySelector(`#${column}`)
+              .closest(".kanban-column")
+              .querySelector("span");
+            if (countElement) countElement.textContent = count;
+
+            (this.columns[column] || []).forEach((task) => {
+              if (!task || !task.id) return; // Skip invalid tasks
+              const card = document.createElement("div");
+              card.className = "kanban-card";
+              card.draggable = true; // Keep draggable for Sortable compatibility
+              card.dataset.id = task.id;
+              card.dataset.column = column;
+
+              card.innerHTML = `
+                            <div contenteditable="true" class="title editable" data-task-id="${
+                              task.id
+                            }">${task.title || "Untitled Task"}</div>
+                            <div contenteditable="true" class="text-gray-300 text-sm editable description" data-task-id="${
+                              task.id
+                            }">${task.description || "No description"}</div>
+                            <div class="flex justify-between items-center mt-2">
+                                <div class="flex -space-x-2">
+                                    ${
+                                      Array.isArray(task.assignees)
+                                        ? task.assignees
+                                            .map(
+                                              () =>
+                                                '<div class="w-6 h-6 bg-gray-400 rounded-full border-2 border-white"></div>'
+                                            )
+                                            .join("")
+                                        : ""
+                                    }
+                                </div>
+                                <div class="date">${
+                                  task.date ||
+                                  new Date().toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                }</div>
+                            </div>
+                            <button class="delete-btn text-white hover:text-red-500 ml-2 mt-4 bg-[#0013FE] rounded-lg">Delete</button>
+                        `;
+
+              // Handle title editing
+              const titleElement = card.querySelector(".title");
+              titleElement.addEventListener("blur", (e) => {
+                const newTitle = e.target.textContent;
+                this.updateTaskTitle(column, task.id, newTitle);
+              });
+
+              // Handle description editing
+              const descriptionElement = card.querySelector(".description");
+              descriptionElement.addEventListener("blur", (e) => {
+                const newDescription = e.target.textContent;
+                this.updateTaskDescription(column, task.id, newDescription);
+              });
+
+              // Delete button event
+              card
+                .querySelector(".delete-btn")
+                .addEventListener("click", () => {
+                  this.deleteTask(column, task.id);
+                });
+
+              container.appendChild(card);
+            });
+          });
+        }
+      }
+
+      // Initialize the Kanban board
+      const kanbanBoard = new KanbanBoard();
+    </script>
+  </body>
+</html>
